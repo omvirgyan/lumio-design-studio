@@ -140,10 +140,11 @@ Bug reports, feature ideas, documentation fixes, and pull requests are welcome. 
 
 ## Contributors
 
-When a pull request is merged, its author is automatically added below with their GitHub profile. See the [full contribution history](https://github.com/vipinyadav01/lumio-design-studio/graphs/contributors) for commit contributors.
+After a pull request is merged, the contributor-credit workflow proposes adding its author below in a separate README pull request. A maintainer reviews and merges the credit through the normal branch protection rules. See [Contributor credit](CONTRIBUTING.md#contributor-credit) for setup and the manual fallback, or the [full contribution history](https://github.com/vipinyadav01/lumio-design-studio/graphs/contributors) for commit contributors.
 
 <!-- contributors:start -->
 - <a href="https://github.com/vipinyadav01"><img src="https://github.com/vipinyadav01.png?size=32" width="32" height="32" alt="" /></a> <a href="https://github.com/vipinyadav01">Vipin Yadav</a> (@vipinyadav01)
+- <a href="https://github.com/omvirgyan"><img src="https://github.com/omvirgyan.png?size=32" width="32" height="32" alt="" /></a> <a href="https://github.com/omvirgyan">OMVIR GYAN</a> (@omvirgyan)
 <!-- contributors:end -->
 
 ## Support

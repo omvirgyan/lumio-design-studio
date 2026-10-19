@@ -44,3 +44,9 @@ The database tests require `TEST_DATABASE_URL`; check the test output to confirm
 ## Pull requests
 
 Use the pull request template. Explain the problem, the smallest fix, how you verified it, and any deployment or data migration impact. Link the related issue when there is one. A maintainer may ask for changes before merging; please keep follow-up commits focused.
+
+## Contributor credit
+
+After a pull request into `main` is merged, the Credit contributors workflow opens a separate README-only pull request from `automation/credit-<login>`. Maintainers review and merge that pull request normally; the workflow never pushes directly to `main` or bypasses branch protection. Existing credits are matched without regard to case, and bot authors are skipped. Each contributor has a separate branch so pending credits for different people stay independent.
+
+For automatic credit pull requests, a repository administrator must enable **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests**. The workflow uses the repository's `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`; it does not approve or automatically merge pull requests. If repository policy disables automated pull request creation, maintainers can add credit manually through a normal README pull request instead.

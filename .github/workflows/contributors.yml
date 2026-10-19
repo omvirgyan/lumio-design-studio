@@ -6,9 +6,10 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
-  group: credit-contributors
+  group: credit-contributors-${{ github.event.pull_request.user.login }}
   cancel-in-progress: false
 
 jobs:
@@ -21,6 +22,7 @@ jobs:
           ref: main
 
       - name: Add merged pull request author to README
+        id: contributor
         env:
           CONTRIBUTOR_LOGIN: ${{ github.event.pull_request.user.login }}
           GH_TOKEN: ${{ github.token }}
@@ -66,15 +68,23 @@ jobs:
               f'<a href="{profile}">{name}</a> (@{login})'
           )
           readme.write_text(before + start + section.rstrip("\n") + "\n" + entry + "\n" + end + after)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"login={login.lower()}\nchanged=true\n")
           PY
 
-      - name: Commit contributor credit
-        run: |
-          git add README.md
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "docs: credit merged contributor"
-          git push origin HEAD:main
+      - name: Open contributor credit pull request
+        if: steps.contributor.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ github.token }}
+          base: main
+          branch: automation/credit-${{ steps.contributor.outputs.login }}
+          add-paths: README.md
+          commit-message: 'docs: credit @${{ steps.contributor.outputs.login }}'
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          title: 'docs: credit @${{ steps.contributor.outputs.login }}'
+          body: |
+            Credit @${{ steps.contributor.outputs.login }} for merged pull request #${{ github.event.pull_request.number }}.
+
+            This pull request only updates the contributor section in README.md.
+            Please review and merge it through the normal branch protection rules.
