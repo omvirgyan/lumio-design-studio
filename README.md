@@ -1,6 +1,8 @@
 # Lumio
 
-Lumio is an open-source, browser-based design studio: start from a template or a blank size, edit on a canvas, and download or share the result.
+Lumio is an independent, open-source Canva clone for the browser: start from a template or a blank size, edit on a canvas, and download or share the result. Lumio is not affiliated with Canva.
+
+**Latest release:** [v0.1.0](https://github.com/vipinyadav01/lumio-design-studio/releases/tag/v0.1.0)
 
 ## Features
 
@@ -22,7 +24,7 @@ Lumio is an open-source, browser-based design studio: start from a template or a
 
 You need [Bun](https://bun.sh) (this project uses Bun 1.4), Node.js **20.9 or newer**, and a PostgreSQL database (tested with PostgreSQL 16). The database can be on your own server or with a managed PostgreSQL provider. Lumio is a Next.js server application; static hosting alone will not run its auth, designs, or upload APIs.
 
-1. Clone your published copy of the repository. Replace `OWNER` and `REPO` with the values shown on your Git host (this checkout has no Git remote configured yet):
+1. Clone the repository:
 
    ```bash
    git clone https://github.com/vipinyadav01/lumio-design-studio.git lumio
@@ -102,6 +104,10 @@ Do not commit `.env` or database credentials. `.env.example` contains only examp
 ## Contributing
 
 Bug reports, feature ideas, documentation fixes, and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for setup, coding conventions, and checks. Use the issue and pull request templates when opening work on GitHub.
+
+## License
+
+Lumio is released under the [MIT License](LICENSE).
 
 ## Architecture
 
