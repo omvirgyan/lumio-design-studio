@@ -11,6 +11,8 @@ import {
   Layers,
   LayoutTemplate,
   PaintBucket,
+  Palette,
+  Sparkles,
   Redo2,
   Scaling,
   Share2,
@@ -33,7 +35,7 @@ import { EditorContext, type EditorContextValue } from "./editor-context";
 import { LINES, SHAPES, TEXT_PRESETS } from "./elements";
 import { EditorEngine, type EngineState } from "./engine";
 import { renderThumbnail } from "./fabric-setup";
-import { BackgroundPanel, DRAG_MIME, ElementsPanel, HistoryPanel, LayersPanel, TemplatesPanel, TextPanel, UploadsPanel, type DragPayload } from "./panels";
+import { AiPanel, BackgroundPanel, BrandKitPanel, DRAG_MIME, ElementsPanel, HistoryPanel, LayersPanel, TemplatesPanel, TextPanel, UploadsPanel, type DragPayload } from "./panels";
 import { PageStrip } from "./page-strip";
 import { useShortcuts } from "./use-shortcuts";
 import { uploadImage } from "./uploads";
@@ -41,13 +43,15 @@ import { text as textBuilder } from "@/lib/design/builders";
 
 export type EditorDesign = { id: string; title: string; doc: DesignDoc; shareToken: string | null; revision: number };
 
-type PanelId = "templates" | "elements" | "text" | "uploads" | "background" | "layers" | "history";
+type PanelId = "templates" | "elements" | "text" | "uploads" | "brand" | "ai" | "background" | "layers" | "history";
 
 const PANELS: { id: PanelId; label: string; icon: typeof Shapes }[] = [
   { id: "templates", label: "Templates", icon: LayoutTemplate },
   { id: "elements", label: "Elements", icon: Shapes },
   { id: "text", label: "Text", icon: Type },
   { id: "uploads", label: "Uploads", icon: UploadIcon },
+  { id: "brand", label: "Brand Kit", icon: Palette },
+  { id: "ai", label: "AI Studio", icon: Sparkles },
   { id: "background", label: "Background", icon: PaintBucket },
   { id: "layers", label: "Layers", icon: Layers },
   { id: "history", label: "History", icon: History },
@@ -83,6 +87,7 @@ export function Editor({ design }: { design: EditorDesign }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [panning, setPanning] = useState(false);
   const [dropActive, setDropActive] = useState(false);
+  const [participants, setParticipants] = useState<{ id: string; name: string }[]>([]);
 
   const notify = useCallback((message: string, tone: "info" | "error" = "info") => {
     const id = Date.now() + Math.random();
@@ -101,6 +106,7 @@ export function Editor({ design }: { design: EditorDesign }) {
     timer: 0 as unknown as ReturnType<typeof setTimeout>,
   });
   const engineRef = useRef<EditorEngine | null>(null);
+  const savedTitle = useRef(design.title);
   const saveNowRef = useRef<() => Promise<boolean>>(async () => false);
 
   const saveNow = useCallback(async (): Promise<boolean> => {
@@ -172,6 +178,41 @@ export function Editor({ design }: { design: EditorDesign }) {
     };
   }, [saveNow]);
 
+  useEffect(() => {
+    let active = true;
+    let polling = false;
+    const poll = async () => {
+      if (!active || polling || document.visibilityState === "hidden" || !engineRef.current) return;
+      polling = true;
+      try {
+        const status = await api<{ revision: number; title: string; participants: { id: string; name: string }[] }>(`/api/designs/${design.id}/presence`, { method: "POST" });
+        if (!active) return;
+        setParticipants(status.participants);
+        const current = save.current;
+        if (status.revision > current.base && !current.dirty && !current.saving && !current.conflict) {
+          const { design: remote } = await api<{ design: EditorDesign }>(`/api/designs/${design.id}`);
+          if (active && !current.dirty && !current.saving && remote.revision > current.base && engineRef.current) {
+            await engineRef.current.syncRemoteDoc(remote.doc);
+            current.base = remote.revision;
+            setTitle(remote.title);
+            savedTitle.current = remote.title;
+            notify("Latest design changes loaded");
+          }
+        } else if (status.title !== savedTitle.current && document.activeElement?.getAttribute("aria-label") !== "Design title") {
+          setTitle(status.title);
+          savedTitle.current = status.title;
+        }
+      } catch {
+        // Autosave reports connectivity errors; presence is best effort.
+      } finally {
+        polling = false;
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 3000);
+    void poll();
+    return () => { active = false; clearInterval(timer); };
+  }, [design.id, notify]);
+
   // ------------------------------------------------------------ engine lifecycle
   // While true, the page refits whenever the workspace changes size; any manual zoom turns it off.
   const autoFit = useRef(true);
@@ -231,7 +272,6 @@ export function Editor({ design }: { design: EditorDesign }) {
   }, [state.width, state.height, state.ready, fit]);
 
   // ------------------------------------------------------------ title
-  const savedTitle = useRef(design.title);
   async function saveTitle(next: string) {
     const clean = next.trim().slice(0, 120) || "Untitled design";
     setTitle(clean);
@@ -406,6 +446,7 @@ export function Editor({ design }: { design: EditorDesign }) {
         <span className="hidden items-center gap-1.5 text-xs text-white/80 md:flex" role="status" aria-live="polite">
           {statusView.icon} {statusView.text}
         </span>
+        {participants.length > 0 && <span className="hidden truncate text-xs text-white/80 lg:inline" title={participants.map((person) => person.name).join(", ")}>{participants.map((person) => person.name).join(", ")} editing</span>}
         <div className="ml-auto flex items-center gap-1">
           <IconButton label="Undo (Ctrl+Z)" className="text-white hover:bg-white/15 disabled:text-white/40" disabled={!state.canUndo} onClick={() => engine?.undo()}>
             <Undo2 size={17} />
@@ -474,9 +515,11 @@ export function Editor({ design }: { design: EditorDesign }) {
             {ctx ? (
               <EditorContext value={ctx}>
                 {panel === "templates" && <TemplatesPanel />}
+                {panel === "ai" && <AiPanel />}
                 {panel === "elements" && <ElementsPanel />}
                 {panel === "text" && <TextPanel />}
                 {panel === "uploads" && <UploadsPanel />}
+                {panel === "brand" && <BrandKitPanel />}
                 {panel === "background" && <BackgroundPanel />}
                 {panel === "layers" && <LayersPanel />}
                 {panel === "history" && <HistoryPanel saveNow={saveNow} />}

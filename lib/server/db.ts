@@ -70,6 +70,87 @@ const MIGRATIONS: string[] = [
     created_at BIGINT NOT NULL
   );
   `,
+  `
+  ALTER TABLE users ADD COLUMN email_verified_at BIGINT;
+  UPDATE users SET email_verified_at = created_at;
+  CREATE TABLE email_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose TEXT NOT NULL CHECK (purpose IN ('verify', 'reset')),
+    expires_at BIGINT NOT NULL,
+    created_at BIGINT NOT NULL
+  );
+  CREATE INDEX email_tokens_user_purpose ON email_tokens(user_id, purpose);
+  `,
+  `
+  CREATE TABLE folders (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_at BIGINT NOT NULL
+  );
+  CREATE INDEX folders_owner ON folders(owner_id, name);
+  ALTER TABLE designs ADD COLUMN folder_id UUID REFERENCES folders(id) ON DELETE SET NULL;
+  ALTER TABLE designs ADD COLUMN favourite BOOLEAN NOT NULL DEFAULT FALSE;
+  ALTER TABLE designs ADD COLUMN deleted_at BIGINT;
+  CREATE INDEX designs_trash ON designs(owner_id, deleted_at) WHERE deleted_at IS NOT NULL;
+  `,
+  `
+  CREATE TABLE brand_kits (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    colors JSONB NOT NULL DEFAULT '[]'::jsonb,
+    font_family TEXT,
+    logo_upload_id TEXT REFERENCES uploads(id) ON DELETE SET NULL,
+    updated_at BIGINT NOT NULL
+  );
+  `,
+  `
+  CREATE TABLE design_comments (
+    id UUID PRIMARY KEY,
+    design_id UUID NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+    author_name TEXT NOT NULL,
+    body TEXT NOT NULL,
+    page_index INTEGER NOT NULL DEFAULT 0,
+    created_at BIGINT NOT NULL
+  );
+  CREATE INDEX comments_design ON design_comments(design_id, created_at DESC);
+  `,
+  `
+  CREATE TABLE workspaces (
+    id UUID PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at BIGINT NOT NULL
+  );
+  CREATE TABLE workspace_members (
+    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('admin', 'editor', 'viewer')),
+    joined_at BIGINT NOT NULL,
+    PRIMARY KEY (workspace_id, user_id)
+  );
+  CREATE INDEX workspace_members_user ON workspace_members(user_id);
+  ALTER TABLE designs ADD COLUMN workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE;
+  CREATE INDEX designs_workspace ON designs(workspace_id, updated_at DESC);
+  `,
+  `
+  CREATE TABLE design_presence (
+    design_id UUID NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_seen BIGINT NOT NULL,
+    PRIMARY KEY (design_id, user_id)
+  );
+  CREATE INDEX design_presence_recent ON design_presence(design_id, last_seen DESC);
+  `,
+  `
+  CREATE TABLE provider_requests (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    service TEXT NOT NULL,
+    created_at BIGINT NOT NULL
+  );
+  CREATE INDEX provider_requests_limit ON provider_requests(user_id, service, created_at DESC);
+  `,
 ];
 
 // Arbitrary constant so concurrent processes don't run migrations at the same time.

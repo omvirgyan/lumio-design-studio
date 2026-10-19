@@ -4,6 +4,8 @@ import { Eye, EyeOff, GripVertical, History, Image as ImageIcon, Lock, Trash2, U
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { FONTS } from "@/lib/design/fonts";
+import { rect, text as textBuilder } from "@/lib/design/builders";
+import type { BrandKit } from "@/lib/server/brand-kit";
 import { TEMPLATE_CATEGORIES, TEMPLATES } from "@/lib/design/templates";
 import type { DesignDoc, PageData } from "@/lib/design/types";
 import { DesignPreview } from "@/components/design-preview";
@@ -26,6 +28,104 @@ function setDrag(e: React.DragEvent, payload: DragPayload) {
 
 function PanelHeading({ children }: { children: React.ReactNode }) {
   return <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-ink-500 first:mt-0">{children}</h3>;
+}
+
+export function BrandKitPanel() {
+  const { engine, state, notify } = useEditor();
+  const [kit, setKit] = useState<BrandKit | null>(null);
+  const [newColor, setNewColor] = useState("#7d2ae8");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api<{ brandKit: BrandKit }>("/api/brand-kit").then(({ brandKit }) => { if (alive) setKit(brandKit); }).catch((error: Error) => notify(error.message, "error"));
+    return () => { alive = false; };
+  }, [notify]);
+  if (!kit) return <Spinner size={22} />;
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { brandKit } = await api<{ brandKit: BrandKit }>("/api/brand-kit", { method: "PUT", json: { colors: kit.colors, fontFamily: kit.fontFamily, logoUploadId: kit.logoUploadId } });
+      setKit(brandKit);
+      notify("Brand Kit saved");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not save Brand Kit", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <div className="space-y-4 text-sm text-ink-700">
+    <p className="text-xs text-ink-500">Save your colors, font and logo for reuse across designs.</p>
+    <PanelHeading>Colors</PanelHeading>
+    <div className="flex flex-wrap gap-2">{kit.colors.map((color) => <button key={color} type="button" title={`Apply ${color}`} aria-label={`Apply ${color}`} onClick={() => state.selection ? engine.updateSelection({ fill: color }) : engine.setBackground(color)} className="h-9 w-9 rounded-lg border border-ink-200" style={{ backgroundColor: color }} />)}</div>
+    <div className="flex gap-2"><input type="color" aria-label="New brand color" value={newColor} onChange={(event) => setNewColor(event.target.value)} /><button type="button" disabled={kit.colors.length >= 12 || kit.colors.includes(newColor)} onClick={() => setKit({ ...kit, colors: [...kit.colors, newColor] })} className="rounded-lg bg-ink-100 px-3 py-1.5 disabled:opacity-50">Add color</button></div>
+    {kit.colors.length > 0 && <button type="button" onClick={() => setKit({ ...kit, colors: kit.colors.slice(0, -1) })} className="text-xs text-ink-500 underline">Remove last color</button>}
+    <PanelHeading>Font</PanelHeading>
+    <select aria-label="Brand font" value={kit.fontFamily} onChange={(event) => setKit({ ...kit, fontFamily: event.target.value as BrandKit["fontFamily"] })} className="w-full rounded-lg border border-ink-200 bg-white p-2">{FONTS.map((font) => <option key={font.family} value={font.family}>{font.family}</option>)}</select>
+    <button type="button" disabled={!state.selection?.text} onClick={() => void engine.updateText({ fontFamily: kit.fontFamily })} className="rounded-lg bg-ink-100 px-3 py-1.5 text-xs disabled:opacity-50">Apply to selected text</button>
+    <PanelHeading>Logo</PanelHeading>
+    {kit.logoUrl && <button type="button" onClick={() => void engine.addImage(kit.logoUrl!, "Brand logo")} className="block rounded-lg border border-ink-200 p-2">
+      {/* eslint-disable-next-line @next/next/no-img-element -- authenticated upload served by the API */}
+      <img src={kit.logoUrl} alt="Brand logo" className="max-h-24 max-w-full" />
+    </button>}
+    <input type="file" accept={ACCEPTED_IMAGE_TYPES.join(",")} aria-label="Upload brand logo" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const upload = await uploadImage(file); setKit((current) => current && { ...current, logoUploadId: upload.id, logoUrl: upload.url }); } catch (error) { notify(error instanceof Error ? error.message : "Could not upload logo", "error"); } }} className="block w-full text-xs" />
+    {kit.logoUploadId && <button type="button" onClick={() => setKit({ ...kit, logoUploadId: null, logoUrl: null })} className="text-xs text-ink-500 underline">Remove logo</button>}
+    <Button type="button" onClick={() => void save()} disabled={saving} className="w-full">{saving ? "Saving…" : "Save Brand Kit"}</Button>
+  </div>;
+}
+
+type AiLayout = { headline: string; subtitle: string; background: string; foreground: string; accent: string; layout: "centered" | "split" };
+
+export function AiPanel() {
+  const { engine, state, notify } = useEditor();
+  const [prompt, setPrompt] = useState("");
+  const [layout, setLayout] = useState<AiLayout | null>(null);
+  const [busy, setBusy] = useState<"layout" | "image" | null>(null);
+
+  async function generateLayout() {
+    setBusy("layout");
+    try {
+      const result = await api<{ layout: AiLayout }>("/api/ai/layout", { method: "POST", json: { prompt } });
+      setLayout(result.layout);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not generate layout", "error");
+    } finally { setBusy(null); }
+  }
+
+  async function generateImage() {
+    setBusy("image");
+    try {
+      const { upload } = await api<{ upload: Upload }>("/api/ai/image", { method: "POST", json: { prompt } });
+      await engine.addImage(upload.url, "AI generated image");
+      notify("Image added to design");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not generate image", "error");
+    } finally { setBusy(null); }
+  }
+
+  async function applyLayout() {
+    if (!layout) return;
+    const w = state.width;
+    const h = state.height;
+    engine.setBackground(layout.background);
+    const objects = layout.layout === "split" ? [rect(w * 0.55, 0, w * 0.45, h, layout.accent)] : [];
+    objects.push(textBuilder(w * 0.08, h * 0.22, w * 0.48, layout.headline, { fontSize: Math.max(24, Math.round(w * 0.065)), fontFamily: "Poppins", fontWeight: "bold", fill: layout.foreground, align: layout.layout === "centered" ? "center" : "left" }));
+    objects.push(textBuilder(w * 0.08, h * 0.53, w * 0.48, layout.subtitle, { fontSize: Math.max(16, Math.round(w * 0.028)), fontFamily: "Inter", fill: layout.foreground, align: layout.layout === "centered" ? "center" : "left" }));
+    if (layout.layout === "centered") {
+      objects[0].left = w * 0.1;
+      objects[0].width = w * 0.8;
+      objects[1].left = w * 0.18;
+      objects[1].width = w * 0.64;
+    }
+    await engine.addSerialized(objects);
+    notify("Suggested layout added. Edit each element on the canvas.");
+  }
+
+  return <div className="space-y-4 text-sm text-ink-700">
+    <p className="text-xs text-ink-500">Describe your design. Generate editable copy and layout, or create an image. Your server needs an OpenAI API key.</p>
+    <label className="block text-xs font-semibold">Design brief<textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={500} rows={4} placeholder="A bold launch poster for a local coffee shop" className="mt-2 w-full rounded-lg border border-ink-200 p-3 text-sm" /></label>
+    <div className="grid grid-cols-2 gap-2"><Button type="button" disabled={busy !== null || prompt.trim().length < 5} onClick={() => void generateLayout()}>{busy === "layout" ? "Generating…" : "Suggest layout"}</Button><Button type="button" variant="secondary" disabled={busy !== null || prompt.trim().length < 5} onClick={() => void generateImage()}>{busy === "image" ? "Generating…" : "Generate image"}</Button></div>
+    {layout && <div className="space-y-3 rounded-lg border border-ink-200 p-3"><p className="font-semibold">{layout.headline}</p><p className="text-xs">{layout.subtitle}</p><div className="flex gap-2" aria-label="Suggested colors">{[layout.background, layout.foreground, layout.accent].map((color) => <span key={color} title={color} className="h-8 w-8 rounded-full border border-ink-200" style={{ backgroundColor: color }} />)}</div><p className="text-xs capitalize text-ink-500">{layout.layout} layout</p><Button type="button" onClick={() => void applyLayout()}>Apply editable layout</Button></div>}
+  </div>;
 }
 
 const templatePages = new Map<string, PageData>(TEMPLATES.map((t) => [t.id, { id: t.id, background: t.pages[0].background, objects: t.pages[0].objects }]));

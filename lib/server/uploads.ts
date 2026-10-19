@@ -70,6 +70,10 @@ export async function getUploadData(id: string): Promise<{ mime: RasterMime; dat
   return row ?? null;
 }
 
+export async function getOwnedUploadData(ownerId: string, id: string): Promise<{ mime: RasterMime; data: Uint8Array } | null> {
+  return (await queryOne<{ mime: RasterMime; data: Uint8Array }>("SELECT mime, data FROM uploads WHERE id = $1 AND owner_id = $2", [id, ownerId])) ?? null;
+}
+
 export async function deleteUpload(ownerId: string, id: string): Promise<boolean> {
   return (await execute("DELETE FROM uploads WHERE id = $1 AND owner_id = $2", [id, ownerId])) > 0;
 }

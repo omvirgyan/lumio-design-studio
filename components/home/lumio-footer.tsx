@@ -5,7 +5,7 @@ import { Heart } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 
 const STATS = [
-  { value: "14", label: "Editable templates", sub: "ready to customize" },
+  { value: "20", label: "Editable templates", sub: "ready to customize" },
   { value: "12", label: "Size presets", sub: "plus custom dimensions" },
   { value: "10", label: "Bundled fonts", sub: "for styled text" },
   { value: "4", label: "Export formats", sub: "PNG, JPG, SVG and PDF" },

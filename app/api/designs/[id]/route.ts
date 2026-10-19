@@ -1,5 +1,5 @@
 import { HttpError, json, readJson, requireApiUser, route } from "@/lib/server/http";
-import { DesignConflictError, deleteDesign, getDesign, updateDesign } from "@/lib/server/designs";
+import { DesignConflictError, deleteDesign, getDesign, purgeDesign, restoreDesign, updateDesign } from "@/lib/server/designs";
 import { MAX_DOC_BYTES, patchDesignSchema } from "@/lib/server/schemas";
 import { parseDesignDoc, type DesignDoc } from "@/lib/design/types";
 
@@ -24,7 +24,7 @@ export const PATCH = route(async (request, ctx: Ctx) => {
     doc = parsed.value;
   }
   try {
-    const result = await updateDesign(user.id, id, { title: body.title, doc, thumbnail: body.thumbnail }, body.baseRevision);
+    const result = await updateDesign(user.id, id, { title: body.title, doc, thumbnail: body.thumbnail, favourite: body.favourite, folderId: body.folderId }, body.baseRevision);
     if (result === null) throw new HttpError(404, "Design not found");
     return json(result);
   } catch (err) {
@@ -35,9 +35,17 @@ export const PATCH = route(async (request, ctx: Ctx) => {
   }
 });
 
-export const DELETE = route(async (_request, ctx: Ctx) => {
+export const DELETE = route(async (request, ctx: Ctx) => {
   const user = await requireApiUser();
   const { id } = await ctx.params;
-  if (!(await deleteDesign(user.id, id))) throw new HttpError(404, "Design not found");
+  const permanent = new URL(request.url).searchParams.get("permanent") === "1";
+  if (!(await (permanent ? purgeDesign(user.id, id) : deleteDesign(user.id, id)))) throw new HttpError(404, "Design not found");
+  return json({ ok: true });
+});
+
+export const POST = route(async (_request, ctx: Ctx) => {
+  const user = await requireApiUser();
+  const { id } = await ctx.params;
+  if (!(await restoreDesign(user.id, id))) throw new HttpError(404, "Design not found in trash");
   return json({ ok: true });
 });

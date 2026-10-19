@@ -5,19 +5,34 @@ import { Check, Sparkles } from "lucide-react";
 
 const FEATURES = [
   {
-    title: "Start creating",
-    description: "Choose a template, a size preset, or custom dimensions for your design.",
-    items: ["14 editable templates", "12 size presets", "Custom canvas dimensions"],
+    title: "Create and resize",
+    description: "Start from a template or blank page and adapt it for another format.",
+    items: ["20 searchable templates", "12 size presets", "One-click resize with undo"],
   },
   {
     title: "Make it yours",
-    description: "Arrange text, shapes, and images across one or more pages.",
-    items: ["Text styling and bundled fonts", "Layers, guides, and undo/redo", "Automatic saves and named versions"],
+    description: "Reuse your brand and edit images on the canvas.",
+    items: ["Brand Kit colors, font and logo", "Photo crop and filters", "Optional background removal"],
   },
   {
-    title: "Share your work",
-    description: "Download your design or let someone view and copy it through a share link.",
-    items: ["PNG, JPG, SVG, and PDF exports", "View-only share links", "Copy a shared design"],
+    title: "Stay organized",
+    description: "Find and recover the designs that matter.",
+    items: ["Folders, favourites and trash", "Automatic saves and versions", "Email verification and reset with SMTP"],
+  },
+  {
+    title: "Get feedback",
+    description: "Share a view-only link and collect comments on each page.",
+    items: ["Page-specific comments", "Revocable share links", "PNG, JPG, SVG and PDF exports"],
+  },
+  {
+    title: "Work with a team",
+    description: "Keep shared designs in a team workspace.",
+    items: ["Editor and viewer roles", "See active editors", "Saved changes update within seconds"],
+  },
+  {
+    title: "Try AI Studio",
+    description: "Connect your own provider key to generate content.",
+    items: ["Editable copy and layout ideas", "AI image generation", "Server-side keys and usage limits"],
   },
 ];
 

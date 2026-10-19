@@ -20,6 +20,8 @@ import {
   Video,
   Palette,
   CreditCard,
+  Star,
+  RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -41,8 +43,15 @@ type DesignSummary = {
   height: number;
   thumbnail: string | null;
   shared: boolean;
+  folderId: string | null;
+  workspaceId: string | null;
+  favourite: boolean;
+  deletedAt: number | null;
   updatedAt: number;
 };
+type Folder = { id: string; name: string };
+type Workspace = { id: string; name: string; role: "admin" | "editor" | "viewer" };
+type WorkspaceMember = { userId: string; name: string; email: string; role: Workspace["role"] };
 
 const templatePages = new Map<string, PageData>(
   TEMPLATES.map((t) => [t.id, { id: t.id, background: t.pages[0].background, objects: t.pages[0].objects }]),
@@ -63,6 +72,16 @@ export function Dashboard({ user }: { user: { name: string; email: string } }) {
   const router = useRouter();
   const params = useSearchParams();
   const [designs, setDesigns] = useState<DesignSummary[] | null>(null);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [newWorkspace, setNewWorkspace] = useState("");
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberRole, setMemberRole] = useState<"editor" | "viewer">("editor");
+  const [view, setView] = useState<"active" | "favourites" | "trash">("active");
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [newFolder, setNewFolder] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
@@ -71,33 +90,57 @@ export function Dashboard({ user }: { user: { name: string; email: string } }) {
   const [renaming, setRenaming] = useState<DesignSummary | null>(null);
   const [deleting, setDeleting] = useState<DesignSummary | null>(null);
   const autoTemplate = useRef(false);
+  const canCreate = !workspaceId || workspaces.find((workspace) => workspace.id === workspaceId)?.role !== "viewer";
 
   const load = useCallback(async () => {
     try {
-      const data = await api<{ designs: DesignSummary[] }>("/api/designs");
+      const params = new URLSearchParams({ view });
+      if (workspaceId) params.set("workspace", workspaceId);
+      if (folderId && view !== "trash" && !workspaceId) params.set("folder", folderId);
+      const data = await api<{ designs: DesignSummary[] }>(`/api/designs?${params}`);
       setDesigns(data.designs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load designs");
     }
-  }, []);
+  }, [folderId, view, workspaceId]);
 
   useEffect(() => {
     let alive = true;
-    api<{ designs: DesignSummary[] }>("/api/designs")
-      .then((d) => alive && setDesigns(d.designs))
-      .catch((err: unknown) => alive && setError(err instanceof Error ? err.message : "Could not load designs"));
-    return () => {
-      alive = false;
-    };
+    const params = new URLSearchParams({ view });
+    if (workspaceId) params.set("workspace", workspaceId);
+    if (folderId && view !== "trash" && !workspaceId) params.set("folder", folderId);
+    api<{ designs: DesignSummary[] }>(`/api/designs?${params}`)
+      .then((data) => { if (alive) setDesigns(data.designs); })
+      .catch((err: unknown) => { if (alive) setError(err instanceof Error ? err.message : "Could not load designs"); });
+    return () => { alive = false; };
+  }, [folderId, view, workspaceId]);
+
+  useEffect(() => {
+    api<{ folders: Folder[] }>("/api/folders").then((data) => setFolders(data.folders)).catch((err: Error) => setError(err.message));
+    api<{ workspaces: Workspace[] }>("/api/workspaces").then((data) => {
+      setWorkspaces(data.workspaces);
+      const last = sessionStorage.getItem("lumio-workspace");
+      if (last && data.workspaces.some((workspace) => workspace.id === last)) setWorkspaceId(last);
+    }).catch((err: Error) => setError(err.message));
   }, []);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    let alive = true;
+    api<{ members: WorkspaceMember[] }>(`/api/workspaces/${workspaceId}/members`)
+      .then((data) => { if (alive) setMembers(data.members); })
+      .catch((err: Error) => { if (alive) setError(err.message); });
+    return () => { alive = false; };
+  }, [workspaceId]);
 
   const create = useCallback(
     async (title: string, doc: DesignDoc) => {
+      if (!canCreate) { setError("Viewers cannot create designs in this workspace"); return; }
       setCreating(true);
       try {
         const { design } = await api<{ design: { id: string } }>("/api/designs", {
           method: "POST",
-          json: { title, doc },
+          json: { title, doc, ...(workspaceId ? { workspaceId } : {}) },
         });
         router.push(`/design/${design.id}`);
       } catch (err) {
@@ -105,7 +148,7 @@ export function Dashboard({ user }: { user: { name: string; email: string } }) {
         setCreating(false);
       }
     },
-    [router],
+    [router, workspaceId, canCreate],
   );
 
   const fromTemplate = useCallback((t: Template) => create(t.name, templateToDoc(t)), [create]);
@@ -199,36 +242,54 @@ export function Dashboard({ user }: { user: { name: string; email: string } }) {
                   const preset = SIZE_PRESETS.find((p) => p.id === item.id);
                   if (!preset) return null;
                   return (
-                    <button key={item.id} type="button" disabled={creating} onClick={() => create(preset.name, blankDoc(preset.width, preset.height))} className="flex min-w-[72px] flex-col items-center gap-2 text-xs text-[#d7d3de] transition-colors hover:text-white disabled:opacity-50">
+                    <button key={item.id} type="button" disabled={creating || !canCreate} onClick={() => create(preset.name, blankDoc(preset.width, preset.height))} className="flex min-w-[72px] flex-col items-center gap-2 text-xs text-[#d7d3de] transition-colors hover:text-white disabled:opacity-50">
                       <span className={`flex h-12 w-12 items-center justify-center rounded-full ${item.color} text-white shadow-md sm:h-14 sm:w-14`}><Icon className="h-6 w-6" /></span>
                       <span className="whitespace-nowrap">{item.label}</span>
                     </button>
                   );
                 })}
-                <button type="button" onClick={() => setCustomOpen(true)} className="flex min-w-[72px] flex-col items-center gap-2 text-xs text-[#d7d3de] hover:text-white">
+                <button type="button" disabled={!canCreate} onClick={() => setCustomOpen(true)} className="flex min-w-[72px] flex-col items-center gap-2 text-xs text-[#d7d3de] hover:text-white disabled:opacity-50">
                   <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#efedf2] text-[#24222b] sm:h-14 sm:w-14"><SlidersHorizontal className="h-6 w-6" /></span>Custom size
                 </button>
               </div>
             </div>
           </section>
 
+          <section aria-label="Team workspaces" className="rounded-2xl border border-white/10 bg-[#25232b] p-4 sm:p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-sm font-semibold text-white">Workspace <select value={workspaceId ?? ""} onChange={(event) => { const id = event.target.value; setDesigns(null); setWorkspaceId(id || null); setFolderId(null); if (id) sessionStorage.setItem("lumio-workspace", id); else sessionStorage.removeItem("lumio-workspace"); }} className="ml-2 rounded-lg border border-white/10 bg-[#34313c] px-3 py-2 text-sm text-white"><option value="">Personal</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
+              <form onSubmit={async (event) => { event.preventDefault(); if (!newWorkspace.trim()) return; try { const { workspace } = await api<{ workspace: Workspace }>("/api/workspaces", { method: "POST", json: { name: newWorkspace.trim() } }); setWorkspaces((current) => [...current, workspace]); setWorkspaceId(workspace.id); sessionStorage.setItem("lumio-workspace", workspace.id); setNewWorkspace(""); } catch (err) { setError(err instanceof Error ? err.message : "Could not create workspace"); } }} className="flex gap-2"><input aria-label="New workspace name" placeholder="New team workspace" maxLength={80} value={newWorkspace} onChange={(event) => setNewWorkspace(event.target.value)} className="min-w-0 rounded-lg border border-white/10 bg-[#34313c] px-3 py-2 text-xs text-white" /><button type="submit" className="rounded-lg bg-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/20">Create</button></form>
+            </div>
+            {workspaceId && <div className="mt-4 border-t border-white/10 pt-4"><h2 className="text-sm font-semibold text-white">Members</h2><ul className="mt-2 flex flex-wrap gap-2 text-xs">{members.map((member) => <li key={member.userId} className="rounded-lg bg-white/5 px-3 py-2">{member.name} · {member.role}{workspaces.find((workspace) => workspace.id === workspaceId)?.role === "admin" && member.role !== "admin" && <button type="button" onClick={async () => { try { await api(`/api/workspaces/${workspaceId}/members/${member.userId}`, { method: "DELETE" }); setMembers((current) => current.filter((item) => item.userId !== member.userId)); } catch (err) { setError(err instanceof Error ? err.message : "Could not remove member"); } }} aria-label={`Remove ${member.name}`} className="ml-2 text-rose-300 hover:underline">Remove</button>}</li>)}</ul>
+              {workspaces.find((workspace) => workspace.id === workspaceId)?.role === "admin" && <form onSubmit={async (event) => { event.preventDefault(); try { const { member } = await api<{ member: WorkspaceMember }>(`/api/workspaces/${workspaceId}/members`, { method: "POST", json: { email: memberEmail, role: memberRole } }); setMembers((current) => [...current.filter((item) => item.userId !== member.userId), member]); setMemberEmail(""); } catch (err) { setError(err instanceof Error ? err.message : "Could not add member"); } }} className="mt-3 flex flex-wrap gap-2"><input type="email" required aria-label="Member email" placeholder="Existing user's email" value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} className="rounded-lg border border-white/10 bg-[#34313c] px-3 py-2 text-xs text-white" /><select aria-label="Member role" value={memberRole} onChange={(event) => setMemberRole(event.target.value as "editor" | "viewer")} className="rounded-lg border border-white/10 bg-[#34313c] px-3 py-2 text-xs text-white"><option value="editor">Editor</option><option value="viewer">Viewer</option></select><button type="submit" className="rounded-lg bg-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/20">Add member</button></form>}
+            </div>}
+          </section>
+
           <section id="designs" aria-labelledby="designs-heading" className="scroll-mt-8">
             <div className="mb-5 flex items-center justify-between">
-              <h2 id="designs-heading" className="text-xl font-semibold text-[#f3f1f6]">Continue designing</h2>
+              <h2 id="designs-heading" className="text-xl font-semibold text-[#f3f1f6]">{workspaceId ? "Team designs" : "Your designs"}</h2>
               {q && <span className="text-xs text-[#aaa5b2]">Results for &quot;{query}&quot;</span>}
             </div>
+            <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Design filters">
+              {(["active", "favourites", "trash"] as const).map((item) => (
+                <button key={item} type="button" aria-pressed={view === item} onClick={() => { setView(item); setFolderId(null); }} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${view === item ? "bg-[#7140b8] text-white" : "bg-white/5 text-[#bbb6c5] hover:bg-white/10"}`}>{item === "active" ? "All designs" : item === "favourites" ? "Favourites" : "Trash"}</button>
+              ))}
+              {view !== "trash" && !workspaceId && <select aria-label="Filter by folder" value={folderId ?? ""} onChange={(event) => setFolderId(event.target.value || null)} className="rounded-full border border-white/10 bg-[#29272e] px-3 py-1.5 text-xs text-white"><option value="">All folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>}
+              {folderId && <button type="button" onClick={async () => { if (!window.confirm("Delete this folder? Its designs will stay in All designs.")) return; await api(`/api/folders/${folderId}`, { method: "DELETE" }).then(() => { setFolders((current) => current.filter((folder) => folder.id !== folderId)); setFolderId(null); }).catch((err: Error) => setError(err.message)); }} className="text-xs text-rose-300 hover:underline">Delete folder</button>}
+            </div>
+            {view !== "trash" && !workspaceId && <form className="mb-5 flex max-w-xs gap-2" onSubmit={async (event) => { event.preventDefault(); if (!newFolder.trim()) return; try { const { folder } = await api<{ folder: Folder }>("/api/folders", { method: "POST", json: { name: newFolder.trim() } }); setFolders((current) => [...current, folder]); setNewFolder(""); setFolderId(folder.id); } catch (err) { setError(err instanceof Error ? err.message : "Could not create folder"); } }}><input aria-label="New folder name" placeholder="New folder name" maxLength={80} value={newFolder} onChange={(event) => setNewFolder(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#29272e] px-3 py-2 text-xs text-white" /><button type="submit" className="rounded-lg bg-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/20">Create folder</button></form>}
             {filteredDesigns === null ? (
               <div className="flex h-40 items-center justify-center rounded-xl bg-white/5"><Spinner className="text-[#a979f0]" size={28} /></div>
             ) : filteredDesigns.length === 0 ? (
               <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-6 text-center">
                 <FolderPlus className="h-8 w-8 text-[#a979f0]" />
-                <p className="mt-3 text-sm font-semibold">{q ? "No matching designs" : "Your designs will appear here"}</p>
-                <p className="mt-1 text-xs text-[#aaa5b2]">{q ? "Try another search term." : "Choose a quick-create format or template to begin."}</p>
+                <p className="mt-3 text-sm font-semibold">{q ? "No matching designs" : view === "trash" ? "Trash is empty" : "Your designs will appear here"}</p>
+                <p className="mt-1 text-xs text-[#aaa5b2]">{q ? "Try another search term." : view === "trash" ? "Deleted designs can be restored here." : "Choose a quick-create format or template to begin."}</p>
               </div>
             ) : (
               <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
                 {filteredDesigns.map((d) => (
-                  <LumioDesignCard key={d.id} design={d} onRename={() => setRenaming(d)} onDuplicate={() => duplicate(d)} onDelete={() => setDeleting(d)} />
+                  <LumioDesignCard key={d.id} design={d} folders={workspaceId ? [] : folders} readOnly={!canCreate} onRename={() => setRenaming(d)} onDuplicate={() => duplicate(d)} onDelete={() => setDeleting(d)} onFavourite={async () => { await api(`/api/designs/${d.id}`, { method: "PATCH", json: { favourite: !d.favourite } }).then(() => load()).catch((err: Error) => setError(err.message)); }} onMove={async (target) => { await api(`/api/designs/${d.id}`, { method: "PATCH", json: { folderId: target } }).then(() => load()).catch((err: Error) => setError(err.message)); }} onRestore={async () => { await api(`/api/designs/${d.id}`, { method: "POST" }).then(() => load()).catch((err: Error) => setError(err.message)); }} />
                 ))}
               </ul>
             )}
@@ -254,7 +315,7 @@ export function Dashboard({ user }: { user: { name: string; email: string } }) {
                   const page = templatePages.get(t.id);
                   if (!page) return null;
                   return (
-                    <button key={t.id} type="button" disabled={creating} onClick={() => fromTemplate(t)} className="group overflow-hidden rounded-xl border border-white/10 bg-[#29272e] text-left transition-colors hover:border-[#9e64eb] disabled:opacity-50">
+                    <button key={t.id} type="button" disabled={creating || !canCreate} onClick={() => fromTemplate(t)} className="group overflow-hidden rounded-xl border border-white/10 bg-[#29272e] text-left transition-colors hover:border-[#9e64eb] disabled:opacity-50">
                       <div className="aspect-[4/3] overflow-hidden bg-[#34313c]"><DesignPreview page={page} width={t.width} height={t.height} alt={`${t.name} template`} className="h-full w-full transition-transform duration-300 group-hover:scale-[1.03]" /></div>
                       <div className="p-3"><span className="block truncate text-sm font-semibold text-white">{t.name}</span><span className="mt-1 block text-xs text-[#aaa5b2]">{t.category} · {t.pages.length} {t.pages.length === 1 ? "page" : "pages"}</span></div>
                     </button>
@@ -283,10 +344,10 @@ export function Dashboard({ user }: { user: { name: string; email: string } }) {
         }}
       />
 
-      <Dialog open={!!deleting} onClose={() => setDeleting(null)} title="Delete Project?">
+      <Dialog open={!!deleting} onClose={() => setDeleting(null)} title={view === "trash" ? "Delete permanently?" : "Move to trash?"}>
         <div className="p-1">
           <p className="text-xs text-[#86868b] leading-relaxed">
-            &ldquo;{deleting?.title}&rdquo; and its entire revision history will be permanently erased. This action cannot be undone.
+            {view === "trash" ? <> &ldquo;{deleting?.title}&rdquo; and its history will be permanently erased. This cannot be undone.</> : <> &ldquo;{deleting?.title}&rdquo; will move to trash. You can restore it later.</>}
           </p>
           <div className="mt-6 flex justify-end gap-2.5">
             <button
@@ -300,13 +361,13 @@ export function Dashboard({ user }: { user: { name: string; email: string } }) {
               type="button"
               onClick={async () => {
                 if (!deleting) return;
-                await api(`/api/designs/${deleting.id}`, { method: "DELETE" }).catch((e: Error) => setError(e.message));
+                await api(`/api/designs/${deleting.id}${view === "trash" ? "?permanent=1" : ""}`, { method: "DELETE" }).catch((e: Error) => setError(e.message));
                 setDeleting(null);
                 void load();
               }}
               className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 shadow-sm transition-colors"
             >
-              Delete
+              {view === "trash" ? "Delete permanently" : "Move to trash"}
             </button>
           </div>
         </div>
@@ -317,14 +378,24 @@ export function Dashboard({ user }: { user: { name: string; email: string } }) {
 
 function LumioDesignCard({
   design,
+  folders,
+  readOnly,
   onRename,
   onDuplicate,
   onDelete,
+  onFavourite,
+  onMove,
+  onRestore,
 }: {
   design: DesignSummary;
+  folders: Folder[];
+  readOnly: boolean;
   onRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onFavourite: () => void;
+  onMove: (folderId: string | null) => void;
+  onRestore: () => void;
 }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLLIElement>(null);
@@ -345,6 +416,8 @@ function LumioDesignCard({
     <li className="group relative list-none" ref={menuRef}>
       <Link
         href={`/design/${design.id}`}
+        aria-disabled={!!design.deletedAt}
+        onClick={(event) => { if (design.deletedAt) event.preventDefault(); }}
         className="block rounded-xl border border-white/10 bg-[#29272e] p-3 transition-colors duration-200 hover:border-[#9e64eb]"
       >
         <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-[#36333e] p-2">
@@ -379,11 +452,12 @@ function LumioDesignCard({
               Shared Link
             </span>
           )}
+          {design.favourite && <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-amber-300"><Star className="h-3 w-3 fill-current" /> Favourite</span>}
         </div>
       </Link>
 
       {/* Floating Lumio Action Button */}
-      <button
+      {!readOnly && <button
         type="button"
         aria-label={`Actions for ${design.title}`}
         aria-haspopup="menu"
@@ -396,18 +470,17 @@ function LumioDesignCard({
         className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full bg-[#26232d]/90 text-white shadow-md opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100 ring-1 ring-white/20"
       >
         <MoreHorizontal className="h-4 w-4" />
-      </button>
+      </button>}
 
       {menu && (
         <div
           role="menu"
           className="absolute right-3 top-12 z-50 w-44 rounded-xl border border-white/10 bg-[#2b2833] p-1.5 text-white shadow-2xl animate-in fade-in zoom-in-95 duration-100"
         >
-          {[
-            { label: "Rename", icon: Pencil, action: onRename, danger: false },
-            { label: "Duplicate", icon: Copy, action: onDuplicate, danger: false },
-            { label: "Delete", icon: Trash2, action: onDelete, danger: true },
-          ].map(({ label, icon: Icon, action, danger }) => (
+          {(design.deletedAt
+            ? [{ label: "Restore", icon: RotateCcw, action: onRestore, danger: false }, { label: "Delete forever", icon: Trash2, action: onDelete, danger: true }]
+            : [{ label: "Rename", icon: Pencil, action: onRename, danger: false }, { label: "Duplicate", icon: Copy, action: onDuplicate, danger: false }, { label: design.favourite ? "Remove favourite" : "Add favourite", icon: Star, action: onFavourite, danger: false }, { label: "Move to trash", icon: Trash2, action: onDelete, danger: true }]
+          ).map(({ label, icon: Icon, action, danger }) => (
             <button
               key={label}
               role="menuitem"
@@ -428,6 +501,7 @@ function LumioDesignCard({
               <span>{label}</span>
             </button>
           ))}
+          {!design.deletedAt && !design.workspaceId && <label className="block border-t border-white/10 px-3 py-2 text-xs text-[#bbb6c5]">Folder<select aria-label={`Folder for ${design.title}`} value={design.folderId ?? ""} onChange={(event) => { onMove(event.target.value || null); setMenu(false); }} className="mt-1 w-full rounded-md bg-[#211e29] p-1 text-white"><option value="">No folder</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
         </div>
       )}
     </li>

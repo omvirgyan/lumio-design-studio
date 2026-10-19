@@ -175,15 +175,15 @@ export function ResizeDialog({ open, onClose }: { open: boolean; onClose: () => 
   const valid = [w, h].every((v) => Number.isInteger(Number(v)) && Number(v) >= MIN_DIMENSION && Number(v) <= MAX_DIMENSION);
   return (
     <Dialog open={open} onClose={onClose} title="Resize design">
-      <p className="text-sm text-ink-500">Content on every page is scaled and centered to fit the new size. You can undo this.</p>
+      <p className="text-sm text-ink-500">Choose a preset to resize in one click, or enter a custom size below. Content on every page is scaled to fit; you can undo this.</p>
       <div className="mt-4 flex flex-wrap gap-1.5">
         {SIZE_PRESETS.map((p) => (
           <button
             key={p.id}
             type="button"
-            onClick={() => {
-              setW(String(p.width));
-              setH(String(p.height));
+            onClick={async () => {
+              await engine.resize(p.width, p.height);
+              onClose();
             }}
             className={`rounded-full px-2.5 py-1 text-xs ${Number(w) === p.width && Number(h) === p.height ? "bg-ink-900 text-white" : "bg-ink-100 text-ink-700 hover:bg-ink-200"}`}
           >
