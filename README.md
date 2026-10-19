@@ -145,4 +145,3 @@ tests/                    Vitest suites
 - PDF export embeds each page as a high-resolution image rather than vector text.
 - There's no real-time collaboration, password reset or email verification.
 - The editor is usable on phones, but it's designed for desktop.
-# lumio-design-studio
