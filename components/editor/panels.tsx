@@ -308,7 +308,13 @@ export function UploadsPanel() {
     for (const file of Array.from(files)) {
       setBusy((b) => b + 1);
       try {
-        await uploadImage(file);
+        if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
+          const { importSvg } = await import("./svg-import");
+          await engine.addSerialized(await importSvg(file, engine.size));
+          notify("SVG imported as editable layers");
+        } else {
+          await uploadImage(file);
+        }
       } catch (err) {
         notify(err instanceof Error ? err.message : "Upload failed", "error");
       } finally {
@@ -319,11 +325,11 @@ export function UploadsPanel() {
 
   return (
     <div>
-      <input ref={input} type="file" accept={ACCEPTED_IMAGE_TYPES.join(",")} multiple hidden onChange={(e) => { void handleFiles(e.target.files); e.target.value = ""; }} />
+      <input ref={input} type="file" accept={[...ACCEPTED_IMAGE_TYPES, "image/svg+xml", ".svg"].join(",")} multiple hidden onChange={(e) => { void handleFiles(e.target.files); e.target.value = ""; }} />
       <Button className="w-full" onClick={() => input.current?.click()} disabled={busy > 0}>
         {busy > 0 ? <Spinner /> : <UploadIcon size={16} />} {busy > 0 ? "Uploading…" : "Upload images"}
       </Button>
-      <p className="mt-2 text-xs text-ink-500">PNG, JPEG, WebP or GIF up to 10 MB. You can also drop or paste images onto the canvas.</p>
+      <p className="mt-2 text-xs text-ink-500">PNG, JPEG, WebP or GIF up to 10 MB. Plain SVG up to 2 MB imports directly as editable shape and text layers. You can also drop files onto the canvas.</p>
       {uploads === null ? (
         <div className="mt-6 flex justify-center text-brand-600">
           <Spinner size={22} />

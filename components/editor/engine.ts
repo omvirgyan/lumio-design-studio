@@ -2,7 +2,7 @@
 
 import { ActiveSelection, Canvas, FabricImage, FabricObject, Group, IText, Point, filters, type TPointerEventInfo } from "fabric";
 import { loadFonts } from "@/lib/design/fonts";
-import { newPageId, type DesignDoc, type PageBackground, type PageData, type SerializedObject } from "@/lib/design/types";
+import { MAX_OBJECTS_PER_PAGE, newPageId, type DesignDoc, type PageBackground, type PageData, type SerializedObject } from "@/lib/design/types";
 import { scaleObjects } from "@/lib/design/scale";
 import { applyLockState, backgroundFill, collectFonts, configureFabric, enlivenSafe, SERIALIZE_PROPS, uid } from "./fabric-setup";
 
@@ -576,6 +576,7 @@ export class EditorEngine {
   }
 
   async addSerialized(objects: SerializedObject[], at?: { x: number; y: number }): Promise<void> {
+    if (this.canvas.getObjects().length + objects.length > MAX_OBJECTS_PER_PAGE) throw new Error(`A page supports up to ${MAX_OBJECTS_PER_PAGE} layers`);
     this.exitEditing();
     const enlivened = await enlivenSafe(objects.map((o) => ({ ...o, id: uid() })));
     if (!enlivened.length) return;
