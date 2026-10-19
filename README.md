@@ -25,7 +25,7 @@ You need [Bun](https://bun.sh) (this project uses Bun 1.4), Node.js **20.9 or ne
 1. Clone your published copy of the repository. Replace `OWNER` and `REPO` with the values shown on your Git host (this checkout has no Git remote configured yet):
 
    ```bash
-   git clone https://github.com/OWNER/REPO.git lumio
+   git clone https://github.com/vipinyadav01/lumio-design-studio.git lumio
    cd lumio
    ```
 
