@@ -1,6 +1,6 @@
-# Lumio
+# Lumio — Open-source Canva clone
 
-Lumio is an independent, open-source Canva clone for the browser: start from a template or a blank size, edit on a canvas, and download or share the result. Lumio is not affiliated with Canva.
+Lumio is an independent, MIT-licensed design editor you can self-host. Create graphics from templates or a blank canvas, edit multi-page designs, then export or share them. Lumio is inspired by Canva and is not affiliated with Canva.
 
 **Latest release:** [v0.1.0](https://github.com/vipinyadav01/lumio-design-studio/releases/tag/v0.1.0)
 
