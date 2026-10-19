@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent tooling, including session worktrees with their own build output.
+    ".claude/**",
+    ".claude-flow/**",
   ]),
 ]);
 
