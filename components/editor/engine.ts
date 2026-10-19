@@ -1,6 +1,6 @@
 "use client";
 
-import { ActiveSelection, Canvas, FabricImage, FabricObject, Group, IText, Point, type TPointerEventInfo } from "fabric";
+import { ActiveSelection, Canvas, FabricImage, FabricObject, Group, IText, Point, filters, type TPointerEventInfo } from "fabric";
 import { loadFonts } from "@/lib/design/fonts";
 import { newPageId, type DesignDoc, type PageBackground, type PageData, type SerializedObject } from "@/lib/design/types";
 import { scaleObjects } from "@/lib/design/scale";
@@ -395,6 +395,21 @@ export class EditorEngine {
     this.emit();
   }
 
+  /** Applies a saved remote revision without treating it as a local edit. */
+  async syncRemoteDoc(doc: DesignDoc): Promise<void> {
+    this.width = doc.width;
+    this.height = doc.height;
+    this.pages = doc.pages;
+    this.active = Math.min(this.active, doc.pages.length - 1);
+    this.past = [];
+    this.future = [];
+    this.applyZoom();
+    await this.loadPage(this.active);
+    this.current = this.snapshot();
+    this.revision++;
+    this.emit();
+  }
+
   getPage(index: number): PageData {
     if (index === this.active) this.flush();
     return this.pages[index];
@@ -597,6 +612,59 @@ export class EditorEngine {
     this.prepare(img);
     this.canvas.insertAt(0, img);
     this.canvas.requestRenderAll();
+    this.commit();
+  }
+
+  selectedImageUploadId(): string | null {
+    const image = this.canvas.getActiveObject();
+    if (!(image instanceof FabricImage) || image.locked) return null;
+    const src = image.getSrc().replace(/^https?:\/\/[^/]+/, "");
+    return /^\/api\/uploads\/([A-Za-z0-9_-]{8,64})$/.exec(src)?.[1] ?? null;
+  }
+
+  applyImageFilter(preset: "none" | "grayscale" | "sepia" | "vivid"): void {
+    const image = this.canvas.getActiveObject();
+    if (!(image instanceof FabricImage) || image.locked) return;
+    image.filters = preset === "grayscale" ? [new filters.Grayscale()]
+      : preset === "sepia" ? [new filters.Sepia()]
+        : preset === "vivid" ? [new filters.Contrast({ contrast: 0.2 }), new filters.Saturation({ saturation: 0.3 })] : [];
+    image.applyFilters();
+    this.canvas.requestRenderAll();
+    this.commit();
+  }
+
+  cropImage(inset: number): void {
+    const image = this.canvas.getActiveObject();
+    if (!(image instanceof FabricImage) || image.locked || inset < 0 || inset >= 0.45) return;
+    const element = image.getElement();
+    const width = element.width;
+    const height = element.height;
+    const nextWidth = width * (1 - inset * 2);
+    const nextHeight = height * (1 - inset * 2);
+    const center = image.getCenterPoint();
+    image.set({ cropX: width * inset, cropY: height * inset, width: nextWidth, height: nextHeight });
+    image.setPositionByOrigin(center, "center", "center");
+    image.setCoords();
+    this.canvas.requestRenderAll();
+    this.commit();
+  }
+
+  async replaceSelectedImage(url: string): Promise<void> {
+    const old = this.canvas.getActiveObject();
+    if (!(old instanceof FabricImage) || old.locked) return;
+    const replacement = await FabricImage.fromURL(url, { crossOrigin: "anonymous" });
+    const center = old.getCenterPoint();
+    replacement.set({
+      angle: old.angle, opacity: old.opacity,
+      scaleX: old.getScaledWidth() / replacement.width, scaleY: old.getScaledHeight() / replacement.height,
+      name: old.name, id: old.id,
+    });
+    replacement.setPositionByOrigin(center, "center", "center");
+    const index = this.canvas.getObjects().indexOf(old);
+    this.canvas.remove(old);
+    this.prepare(replacement);
+    this.canvas.insertAt(index, replacement);
+    this.select([replacement]);
     this.commit();
   }
 

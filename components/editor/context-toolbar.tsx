@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
   AlignCenter,
   AlignHorizontalJustifyCenter,
@@ -34,11 +36,13 @@ import {
   Unlock,
 } from "lucide-react";
 import { FONTS, FONT_SIZES } from "@/lib/design/fonts";
+import { api } from "@/lib/api-client";
 import { IconButton } from "@/components/ui/button";
 import { Popover } from "@/components/ui/popover";
 import { ColorPicker, ColorSwatchButton } from "./color-picker";
 import { useEditor } from "./editor-context";
 import { backgroundCss } from "./fabric-setup";
+import type { Upload } from "./uploads";
 
 function Divider() {
   return <span className="mx-1 h-6 w-px shrink-0 bg-ink-200" aria-hidden="true" />;
@@ -62,6 +66,23 @@ const ALIGN_ORDER = ["left", "center", "right", "justify"] as const;
 export function ContextToolbar({ onOpenBackground }: { onOpenBackground: () => void }) {
   const { engine, state } = useEditor();
   const sel = state.selection;
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  async function removeBackground() {
+    const uploadId = engine.selectedImageUploadId();
+    if (!uploadId) { setPhotoError("Select an image from your uploads first"); return; }
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const { upload } = await api<{ upload: Upload }>("/api/uploads/remove-background", { method: "POST", json: { uploadId } });
+      await engine.replaceSelectedImage(upload.url);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Could not remove background");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   if (!sel) {
     const bg = state.pages[state.activePage]?.background ?? "#fff";
@@ -141,6 +162,23 @@ export function ContextToolbar({ onOpenBackground }: { onOpenBackground: () => v
               <ColorPicker value={sel.fill} onChange={(c) => engine.updateSelection({ fill: c })} allowNone={!text} />
             </Popover>
           )}
+          {sel.isImage && <Popover label="Edit photo" trigger={({ toggle, open }) => (
+            <button type="button" onClick={toggle} aria-expanded={open} className="h-8 shrink-0 rounded-md px-2 text-sm text-ink-700 hover:bg-ink-100">Edit photo</button>
+          )}>
+            <div className="w-56 space-y-3 text-sm text-ink-700">
+              <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">Filters</p>
+              <div className="grid grid-cols-2 gap-1">
+                {(["none", "grayscale", "sepia", "vivid"] as const).map((preset) => <button key={preset} type="button" onClick={() => engine.applyImageFilter(preset)} className="rounded-md border border-ink-200 px-2 py-1.5 capitalize hover:bg-ink-100">{preset}</button>)}
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">Crop</p>
+              <div className="grid grid-cols-2 gap-1">
+                <button type="button" onClick={() => engine.cropImage(0.1)} className="rounded-md border border-ink-200 px-2 py-1.5 hover:bg-ink-100">Inset 10%</button>
+                <button type="button" onClick={() => engine.cropImage(0)} className="rounded-md border border-ink-200 px-2 py-1.5 hover:bg-ink-100">Reset crop</button>
+              </div>
+              <button type="button" disabled={photoBusy} onClick={removeBackground} className="w-full rounded-md bg-brand-600 px-2 py-2 text-white disabled:opacity-50">{photoBusy ? "Removing…" : "Remove background"}</button>
+              {photoError && <p role="alert" className="text-xs text-danger-600">{photoError}</p>}
+            </div>
+          </Popover>}
           {text && (
             <>
               <IconButton label="Bold" active={text.fontWeight === "bold" || Number(text.fontWeight) >= 600} onClick={() => engine.updateText({ fontWeight: text.fontWeight === "bold" || Number(text.fontWeight) >= 600 ? "normal" : "bold" })}>

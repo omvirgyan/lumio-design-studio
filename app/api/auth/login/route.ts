@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { clientIp, HttpError, json, rateLimit, readJson, route } from "@/lib/server/http";
 import { loginSchema } from "@/lib/server/schemas";
 import { setSessionCookie } from "@/lib/server/session";
-import { authenticate, createSession, getOrCreateGoogleUser, GoogleAccountConflictError } from "@/lib/server/users";
+import { authenticate, createSession, getOrCreateGoogleUser, GoogleAccountConflictError, EmailNotVerifiedError } from "@/lib/server/users";
 import { safeNext } from "@/lib/safe-redirect";
 
 const GOOGLE_STATE_COOKIE = "lumio_google_oauth";
@@ -129,7 +129,13 @@ export const POST = route(async (request) => {
   const body = await readJson(request, loginSchema, 10_000);
   rateLimit(`login:${clientIp(request)}`, 30, 15 * 60 * 1000);
   rateLimit(`login:${body.email}`, 10, 15 * 60 * 1000);
-  const user = await authenticate(body.email, body.password);
+  let user;
+  try {
+    user = await authenticate(body.email, body.password);
+  } catch (error) {
+    if (error instanceof EmailNotVerifiedError) throw new HttpError(403, error.message);
+    throw error;
+  }
   if (!user) throw new HttpError(401, "Incorrect email or password");
   const session = await createSession(user.id);
   await setSessionCookie(session.token, session.expiresAt);

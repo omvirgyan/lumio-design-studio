@@ -28,15 +28,15 @@ interface MagicFeature {
 const MAGIC_FEATURES: MagicFeature[] = [
   {
     id: "magic-design",
-    title: "Magic Design™",
-    tagline: "Turn your prompt into bespoke designs instantly",
+    title: "AI Layout",
+    tagline: "Turn a brief into an editable starting layout",
     icon: Wand2,
     description:
-      "Just type a few words describing your idea or upload a photo, and watch Magic Design generate finished, tailored presentations, posters, and social graphics.",
+      "Describe a design idea and get a headline, supporting copy, colors, and an editable layout you can refine on the canvas.",
     bullets: [
-      "Generates complete multi-page slide decks",
-      "Creates on-brand social media layouts",
-      "Selects complementary typography and palettes",
+      "Suggests a headline and supporting copy",
+      "Offers centered or split layouts",
+      "Suggests a color palette",
     ],
     mockupPrompt: "Generate an eco-friendly pitch deck with natural tones and clean charts",
     badge: "Most Popular",
@@ -44,15 +44,15 @@ const MAGIC_FEATURES: MagicFeature[] = [
   },
   {
     id: "magic-media",
-    title: "Magic Media™",
-    tagline: "Text to photo, graphic and illustration",
+    title: "AI Images",
+    tagline: "Create an image from a prompt",
     icon: ImageIcon,
     description:
-      "Bring your imagination to life. Describe anything you want to visualize, from 3D isometric icons to photorealistic studio photography, and generate unique assets.",
+      "Describe the image you need. With your server's OpenAI key, Lumio generates an asset and adds it to your design.",
     bullets: [
-      "Photorealistic imagery in any aspect ratio",
-      "Custom vector styles, 3D icons & watercolors",
-      "Seamlessly drop assets straight onto your canvas",
+      "Generate a 1024 × 1024 image",
+      "Save the asset with your uploads",
+      "Add it directly to your canvas",
     ],
     mockupPrompt: "A futuristic glowing holographic sneaker floating in a dark studio, neon cyan",
     badge: "Gen AI",
@@ -60,31 +60,31 @@ const MAGIC_FEATURES: MagicFeature[] = [
   },
   {
     id: "magic-edit",
-    title: "Magic Edit & Eraser",
-    tagline: "Transform or remove elements like magic",
+    title: "Photo Tools",
+    tagline: "Crop, filter, and remove backgrounds",
     icon: PenTool,
     description:
-      "Brush over any object in your design or photo to swap it for something else, or erase unwanted background distractions in a single tap.",
+      "Edit an uploaded image on the canvas. Apply a preset filter, crop its edges, or remove its background with a connected provider.",
     bullets: [
-      "Brush and replace: 'Change coffee cup to flowers'",
-      "Clean background removal with pixel precision",
-      "Fix lighting and remove glare effortlessly",
+      "Grayscale, sepia and vivid filters",
+      "Remove photo backgrounds with a connected provider",
+      "Crop and reset the image crop",
     ],
-    mockupPrompt: "Brush over jacket -> replace with retro denim jacket",
+    mockupPrompt: "Apply a vivid filter and remove the background",
     badge: "Smart Editing",
     gradient: "from-lumio-pink to-amber-500",
   },
   {
     id: "magic-switch",
-    title: "Magic Switch™",
-    tagline: "One click to resize and repurpose anywhere",
+    title: "Quick Resize",
+    tagline: "Resize a design for another format",
     icon: RefreshCw,
     description:
-      "Turn a presentation into a summary doc, or adapt a single Instagram post into an X post, LinkedIn banner, and story simultaneously without redesigning.",
+      "Choose a size preset or enter custom dimensions. Lumio scales the objects on each page to fit the new canvas size.",
     bullets: [
-      "Instantly adapt dimensions to 20+ preset sizes",
-      "Auto-rearranges text and imagery to fit new canvas",
-      "Translate full designs into 100+ languages",
+      "Choose from 12 size presets",
+      "Scale page objects with the canvas",
+      "Undo a resize from the editor history",
     ],
     mockupPrompt: "Resize 1080x1080 Post -> 1920x1080 Presentation + 1080x1920 Story",
     badge: "Time Saver",
@@ -118,14 +118,14 @@ export function LumioMagicStudio() {
           </div>
 
           <h2 className="mt-5 text-3xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
-            All the power of AI,{" "}
+            Creative tools,{" "}
             <span className="bg-gradient-to-r from-lumio-teal via-white to-lumio-pink bg-clip-text text-transparent">
               all in one place
             </span>
           </h2>
 
           <p className="mt-5 text-base sm:text-lg text-ink-300">
-            Magic Studio brings together the best AI creation tools directly into your canvas. Speed up your workflows, spark inspiration, and elevate your team&apos;s output.
+            Generate editable copy and images with your own AI key, then crop, filter, resize, and export from one editor.
           </p>
         </div>
 
@@ -257,7 +257,7 @@ export function LumioMagicStudio() {
                 <div className="mt-4 flex items-center justify-between text-xs text-ink-400 border-t border-white/10 pt-3">
                   <span className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>AI Engine Online</span>
+                    <span>Connect your own AI key</span>
                   </span>
                   <span>Instant high-res export</span>
                 </div>

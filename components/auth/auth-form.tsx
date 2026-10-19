@@ -20,6 +20,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   }[params.get("error") ?? ""];
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -27,10 +28,15 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     setPending(true);
     setError(null);
     try {
-      await api(`/api/auth/${mode}`, {
+      const result = await api<{ needsVerification?: boolean }>(`/api/auth/${mode}`, {
         method: "POST",
         json: Object.fromEntries(form.entries()),
       });
+      if (result.needsVerification) {
+        setNotice("Check your inbox for the verification link before logging in.");
+        setPending(false);
+        return;
+      }
       router.replace(next);
       router.refresh();
     } catch (err) {
@@ -85,6 +91,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           {error || googleError}
         </p>
       )}
+      {notice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
       <Button type="submit" size="lg" className="lumio-gradient-btn mt-2 w-full rounded-xl" disabled={pending}>
         {pending && <Spinner />}
         {mode === "login" ? "Log in" : "Create account"}
@@ -95,6 +102,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           {mode === "login" ? "Create an account" : "Log in"}
         </Link>
       </p>
+      {mode === "login" && <p className="text-center text-sm"><Link href="/forgot-password" className="text-brand-700 hover:underline">Forgot password?</Link> · <Link href="/verify-email" className="text-brand-700 hover:underline">Resend verification</Link></p>}
+      {mode === "signup" && <p className="text-center text-sm"><Link href="/verify-email" className="text-brand-700 hover:underline">Resend verification</Link></p>}
       </form>
     </div>
   );

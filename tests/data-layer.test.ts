@@ -2,25 +2,35 @@ import { randomBytes } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Pool } from "pg";
 import { createPool, migrate, setPoolForTesting } from "@/lib/server/db";
-import { authenticate, createSession, createUser, deleteSession, EmailTakenError, getOrCreateGoogleUser, getUserBySessionToken, GoogleAccountConflictError } from "@/lib/server/users";
+import { authenticate, consumeEmailToken, createSession, createUser, deleteSession, EmailNotVerifiedError, EmailTakenError, getOrCreateGoogleUser, getUserBySessionToken, GoogleAccountConflictError, issueEmailToken } from "@/lib/server/users";
 import {
   createDesign,
+  createFolder,
   createVersion,
   deleteDesign,
+  deleteFolder,
   DesignConflictError,
   disableSharing,
   duplicateDesign,
   enableSharing,
   getDesign,
+  getDesignStatus,
   getDesignByShareToken,
   getVersionDoc,
   listDesigns,
+  listFolders,
   listVersions,
   MAX_VERSIONS,
+  purgeDesign,
+  restoreDesign,
   updateDesign,
 } from "@/lib/server/designs";
 import { deleteUpload, getUploadData, listUploads, saveUpload, UploadError } from "@/lib/server/uploads";
 import { blankDoc } from "@/lib/design/types";
+import { getBrandKit, saveBrandKit } from "@/lib/server/brand-kit";
+import { addComment, deleteComment, listComments } from "@/lib/server/comments";
+import { addMember, createWorkspace, listMembers, listWorkspaces, removeMember } from "@/lib/server/workspaces";
+import { claimProviderQuota } from "@/lib/server/provider-quota";
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 10, 0, 0, 0, 10]);
 
@@ -70,6 +80,39 @@ afterAll(async () => {
 
 describe.skipIf(!available)("data layer (PostgreSQL)", () => {
   describe("users and sessions", () => {
+    it("verifies email and resets passwords with one-time expiring tokens", async () => {
+      const previous = {
+        SMTP_URL: process.env.SMTP_URL,
+        SMTP_FROM: process.env.SMTP_FROM,
+        APP_ORIGIN: process.env.APP_ORIGIN,
+      };
+      process.env.SMTP_URL = "smtp://localhost:1025";
+      process.env.SMTP_FROM = "Lumio <no-reply@example.test>";
+      process.env.APP_ORIGIN = "http://localhost:3000";
+      try {
+        const user = await createUser("verify@example.test", "Verify", "old-password");
+        await expect(authenticate(user.email, "old-password")).rejects.toBeInstanceOf(EmailNotVerifiedError);
+        const verify = await issueEmailToken(user.email, "verify");
+        expect(verify).not.toBeNull();
+        expect(await consumeEmailToken(verify!.token, "verify")).toBe(true);
+        expect(await consumeEmailToken(verify!.token, "verify")).toBe(false);
+        expect(await authenticate(user.email, "old-password")).toEqual(user);
+
+        const session = await createSession(user.id);
+        const reset = await issueEmailToken(user.email, "reset");
+        expect(reset).not.toBeNull();
+        expect(await consumeEmailToken(reset!.token, "reset", "new-password")).toBe(true);
+        expect(await consumeEmailToken(reset!.token, "reset", "another-password")).toBe(false);
+        expect(await authenticate(user.email, "old-password")).toBeNull();
+        expect(await authenticate(user.email, "new-password")).toEqual(user);
+        expect(await getUserBySessionToken(session.token)).toBeNull();
+      } finally {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    });
     it("creates users, rejects duplicate emails case-insensitively, authenticates", async () => {
       const u = await createUser("a@example.test", "A", "password123");
       await expect(createUser("A@EXAMPLE.TEST", "A2", "password123")).rejects.toBeInstanceOf(EmailTakenError);
@@ -111,6 +154,88 @@ describe.skipIf(!available)("data layer (PostgreSQL)", () => {
   });
 
   describe("designs", () => {
+    it("shares revision status and enforces provider budgets across requests", async () => {
+      const owner = await createUser("quota@example.test", "Owner", "password123");
+      const design = await createDesign(owner.id, "Draft", blankDoc(100, 100));
+      expect(await getDesignStatus(owner.id, design.id)).toEqual({ revision: 0, title: "Draft" });
+      await updateDesign(owner.id, design.id, { doc: blankDoc(200, 200) });
+      expect((await getDesignStatus(owner.id, design.id))?.revision).toBe(1);
+      expect(await claimProviderQuota(owner.id, "ai-image", 2)).toBe(true);
+      expect(await claimProviderQuota(owner.id, "ai-image", 2)).toBe(true);
+      expect(await claimProviderQuota(owner.id, "ai-image", 2)).toBe(false);
+      expect(await claimProviderQuota(owner.id, "ai-layout", 1)).toBe(true);
+    });
+    it("shares workspace designs with editors and read-only viewers", async () => {
+      const owner = await createUser("team-owner@example.test", "Owner", "password123");
+      const editor = await createUser("team-editor@example.test", "Editor", "password123");
+      const viewer = await createUser("team-viewer@example.test", "Viewer", "password123");
+      const outsider = await createUser("team-outsider@example.test", "Outsider", "password123");
+      const workspace = await createWorkspace(owner.id, "Studio");
+      expect(await listWorkspaces(owner.id)).toEqual([workspace]);
+      expect(await addMember(outsider.id, workspace.id, editor.email, "editor")).toBeNull();
+      expect(await addMember(owner.id, workspace.id, editor.email, "editor")).toMatchObject({ role: "editor" });
+      expect(await addMember(owner.id, workspace.id, viewer.email, "viewer")).toMatchObject({ role: "viewer" });
+      expect(await listMembers(owner.id, workspace.id)).toHaveLength(3);
+      const design = await createDesign(owner.id, "Team poster", blankDoc(100, 100), null, workspace.id);
+      expect(await listDesigns(owner.id)).toHaveLength(0);
+      expect(await listDesigns(editor.id, undefined, "active", undefined, workspace.id)).toHaveLength(1);
+      expect(await getDesign(viewer.id, design.id)).not.toBeNull();
+      expect(await getDesign(outsider.id, design.id)).toBeNull();
+      expect(await updateDesign(viewer.id, design.id, { title: "Not allowed" })).toBeNull();
+      expect(await updateDesign(editor.id, design.id, { title: "Edited" })).not.toBeNull();
+      expect(await removeMember(owner.id, workspace.id, owner.id)).toBe(false);
+      expect(await removeMember(owner.id, workspace.id, editor.id)).toBe(true);
+      expect(await getDesign(editor.id, design.id)).toBeNull();
+    });
+    it("shares page comments and limits deletion to the design owner", async () => {
+      const owner = await createUser("comments@example.test", "Owner", "password123");
+      const stranger = await createUser("comment-stranger@example.test", "Stranger", "password123");
+      const design = await createDesign(owner.id, "Review", blankDoc(100, 100));
+      expect(await listComments("invalid")).toBeNull();
+      const token = (await enableSharing(owner.id, design.id))!;
+      expect(await addComment(token, "Reviewer", "Looks good", 1)).toBeNull();
+      const comment = await addComment(token, "Reviewer", "Looks good", 0);
+      expect(comment).not.toBeNull();
+      expect(await listComments(token)).toEqual([comment]);
+      expect(await deleteComment(stranger.id, comment!.id)).toBe(false);
+      expect(await deleteComment(owner.id, comment!.id)).toBe(true);
+      expect(await listComments(token)).toEqual([]);
+      await disableSharing(owner.id, design.id);
+      expect(await addComment(token, "Reviewer", "Late", 0)).toBeNull();
+    });
+    it("stores a reusable brand kit and rejects another user's logo", async () => {
+      const owner = await createUser("brand@example.test", "Brand", "password123");
+      const stranger = await createUser("other-brand@example.test", "Other", "password123");
+      expect(await getBrandKit(owner.id)).toMatchObject({ colors: [], fontFamily: "Inter", logoUploadId: null });
+      const image = await saveUpload(owner.id, "logo.png", PNG);
+      expect(await saveBrandKit(stranger.id, { colors: ["#7d2ae8"], fontFamily: "Poppins", logoUploadId: image.id })).toBeNull();
+      expect(await saveBrandKit(owner.id, { colors: ["#7d2ae8"], fontFamily: "Poppins", logoUploadId: image.id })).toMatchObject({
+        colors: ["#7d2ae8"], fontFamily: "Poppins", logoUrl: image.url,
+      });
+    });
+    it("organizes favourites and folders and restores designs from trash", async () => {
+      const owner = await createUser("organize@example.test", "Owner", "password123");
+      const stranger = await createUser("stranger@example.test", "Stranger", "password123");
+      const folder = await createFolder(owner.id, "Campaigns");
+      const design = await createDesign(owner.id, "Launch", blankDoc(100, 100));
+      expect(await updateDesign(stranger.id, design.id, { favourite: true, folderId: folder.id })).toBeNull();
+      expect(await updateDesign(owner.id, design.id, { favourite: true, folderId: folder.id })).not.toBeNull();
+      expect(await listDesigns(owner.id, undefined, "favourites")).toHaveLength(1);
+      expect(await listDesigns(owner.id, undefined, "active", folder.id)).toHaveLength(1);
+      expect(await listFolders(owner.id)).toEqual([folder]);
+      expect(await deleteDesign(owner.id, design.id)).toBe(true);
+      expect(await getDesign(owner.id, design.id)).toBeNull();
+      expect(await listDesigns(owner.id)).toHaveLength(0);
+      expect(await listDesigns(owner.id, undefined, "trash")).toHaveLength(1);
+      expect(await restoreDesign(stranger.id, design.id)).toBe(false);
+      expect(await restoreDesign(owner.id, design.id)).toBe(true);
+      expect(await getDesign(owner.id, design.id)).not.toBeNull();
+      expect(await deleteFolder(owner.id, folder.id)).toBe(true);
+      expect((await getDesign(owner.id, design.id))?.folderId).toBeNull();
+      expect(await deleteDesign(owner.id, design.id)).toBe(true);
+      expect(await purgeDesign(owner.id, design.id)).toBe(true);
+      expect(await restoreDesign(owner.id, design.id)).toBe(false);
+    });
     it("isolates designs by owner", async () => {
       const alice = await createUser("alice@example.test", "Alice", "password123");
       const bob = await createUser("bob@example.test", "Bob", "password123");

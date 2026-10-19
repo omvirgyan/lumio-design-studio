@@ -21,7 +21,7 @@ export function LumioCollaboration() {
           <div className="lg:col-span-6 space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full bg-lumio-purple-light px-3.5 py-1 text-xs font-bold text-lumio-purple">
               <Users className="h-3.5 w-3.5" />
-              <span>Real-Time Collaboration</span>
+              <span>Team Collaboration</span>
             </div>
 
             <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-ink-950 leading-tight">
@@ -30,7 +30,7 @@ export function LumioCollaboration() {
             </h2>
 
             <p className="text-base sm:text-lg text-ink-600 leading-relaxed">
-              Whether you&apos;re across the desk or across the globe, collaborate simultaneously in real time. Brainstorm, refine, and sign off on designs without endless email threads.
+              Work with your team in a shared workspace. See who is editing, review saved changes within seconds, and leave feedback on shared designs.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
@@ -40,7 +40,7 @@ export function LumioCollaboration() {
                 </div>
                 <h3 className="mt-3 text-sm font-bold text-ink-900">Brand Kit Consistency</h3>
                 <p className="mt-1 text-xs text-ink-500">
-                  Lock logos, brand colors, and official fonts so everyone stays 100% on brand.
+                  Save your colors, font, and logo in a personal Brand Kit for reuse.
                 </p>
               </div>
 
@@ -50,7 +50,7 @@ export function LumioCollaboration() {
                 </div>
                 <h3 className="mt-3 text-sm font-bold text-ink-900">Comments & Approvals</h3>
                 <p className="mt-1 text-xs text-ink-500">
-                  Leave feedback directly on objects, resolve threads, and request sign-offs.
+                  Leave page-specific feedback on a shared design link.
                 </p>
               </div>
 
@@ -68,9 +68,9 @@ export function LumioCollaboration() {
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                   <FolderTree className="h-4 w-4" />
                 </div>
-                <h3 className="mt-3 text-sm font-bold text-ink-900">Team Shared Folders</h3>
+                <h3 className="mt-3 text-sm font-bold text-ink-900">Team Workspaces</h3>
                 <p className="mt-1 text-xs text-ink-500">
-                  Organize team assets, logos, and approved templates with granular roles.
+                  Keep team designs together with editor and viewer roles.
                 </p>
               </div>
             </div>
