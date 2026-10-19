@@ -105,6 +105,18 @@ Do not commit `.env` or database credentials. `.env.example` contains only examp
 
 Bug reports, feature ideas, documentation fixes, and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for setup, coding conventions, and checks. Use the issue and pull request templates when opening work on GitHub.
 
+## Contributors
+
+When a pull request is merged, its author is automatically added below with their GitHub profile. See the [full contribution history](https://github.com/vipinyadav01/lumio-design-studio/graphs/contributors) for commit contributors.
+
+<!-- contributors:start -->
+- <a href="https://github.com/vipinyadav01"><img src="https://github.com/vipinyadav01.png?size=32" width="32" height="32" alt="" /></a> <a href="https://github.com/vipinyadav01">Vipin Yadav</a> (@vipinyadav01)
+<!-- contributors:end -->
+
+## Support
+
+If Lumio helps you, you can [sponsor the maintainer on GitHub](https://github.com/sponsors/vipinyadav01).
+
 ## License
 
 Lumio is released under the [MIT License](LICENSE).

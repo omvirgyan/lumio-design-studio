@@ -1,0 +1,80 @@
+name: Credit contributors
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: credit-contributors
+  cancel-in-progress: false
+
+jobs:
+  credit:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Add merged pull request author to README
+        env:
+          CONTRIBUTOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import html
+          import json
+          import os
+          import re
+          import urllib.request
+          from pathlib import Path
+
+          login = os.environ["CONTRIBUTOR_LOGIN"]
+          if login.endswith("[bot]") or not re.fullmatch(r"[A-Za-z0-9-]+", login):
+              raise SystemExit(0)
+
+          readme = Path("README.md")
+          content = readme.read_text()
+          start = "<!-- contributors:start -->"
+          end = "<!-- contributors:end -->"
+          if content.count(start) != 1 or content.count(end) != 1:
+              raise SystemExit("Contributor markers are missing or duplicated")
+          before, tail = content.split(start, 1)
+          section, after = tail.split(end, 1)
+          if re.search(r"\(@" + re.escape(login) + r"\)", section, re.IGNORECASE):
+              raise SystemExit(0)
+
+          request = urllib.request.Request(
+              f"https://api.github.com/users/{login}",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "User-Agent": "lumio-contributors-workflow",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=15) as response:
+              user = json.load(response)
+          name = html.escape(user.get("name") or login)
+          profile = f"https://github.com/{login}"
+          entry = (
+              f'- <a href="{profile}"><img src="{profile}.png?size=32" '
+              f'width="32" height="32" alt="" /></a> '
+              f'<a href="{profile}">{name}</a> (@{login})'
+          )
+          readme.write_text(before + start + section.rstrip("\n") + "\n" + entry + "\n" + end + after)
+          PY
+
+      - name: Commit contributor credit
+        run: |
+          git add README.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: credit merged contributor"
+          git push origin HEAD:main
