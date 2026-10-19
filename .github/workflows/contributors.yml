@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: credit-contributors
@@ -68,13 +69,12 @@ jobs:
           readme.write_text(before + start + section.rstrip("\n") + "\n" + entry + "\n" + end + after)
           PY
 
-      - name: Commit contributor credit
-        run: |
-          git add README.md
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "docs: credit merged contributor"
-          git push origin HEAD:main
+      - name: Create contributor credit pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ github.token }}
+          branch: automation/credit-contributors
+          delete-branch: true
+          commit-message: "docs: credit merged contributor"
+          title: "docs: credit merged contributor"
+          body: "Add the author of the merged pull request to the README contributors list."
