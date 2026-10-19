@@ -20,9 +20,30 @@ Lumio is an independent, MIT-licensed design editor you can self-host. Create gr
 - **Uploads**: PNG, JPEG, WebP and GIF up to 10 MB, stored in PostgreSQL.
 - **Saving**: autosave about a second after each change, an automatic history checkpoint every 10 minutes, named versions, and restore. A design open in two tabs can't silently overwrite itself; the older tab is told to reload.
 - **Export**: PNG (optional transparent background), JPG, SVG (images embedded) and multi-page PDF, at up to 4× scale.
+- **Design health check**: Download checks selected pages for enlarged raster images, text crossing page edges or clipping masks, unavailable fonts, missing assets, and low contrast on solid backgrounds. Warnings are advisory; gradients, photos and per-character text colors need visual review.
+- **Editable SVG import**: choose a plain SVG in Uploads or drop it onto the canvas to create separate editable shape, path and text layers. Imports run locally (up to 2 MB / 2,000 elements); scripts, linked resources, embedded images, filters and unsupported SVG features are rejected with an explanation.
+- **CSV-driven templates**: Bulk create maps CSV columns to `{{field}}` placeholders in text layers, previews each row, and downloads all generated pages as PNGs in one ZIP. Supports up to 500 CSV rows, 2 MB CSV files, 2,000 output graphics and a 256 MB archive payload, with progress and cancellation.
 - **Accounts and sharing**: email/password or Google sign-in, optional email verification and password reset through SMTP, view-only share links with page comments, and "Make a copy" from a shared link.
 - **Team workspaces**: create a workspace, add existing users as editors or viewers, and keep team designs separate from personal designs. Editors can edit; viewers get a read-only page.
 - **Live editing**: active collaborators are shown in the editor. Saved changes from another tab or teammate load automatically within a few seconds when your copy is idle. Concurrent unsaved changes are protected by revision checks and require reloading the latest version.
+
+## Production tools
+
+### Create graphics from a CSV
+
+1. Add text such as `Hello {{name}}` or `Price: {{price}}` to your design. Placeholders also work inside groups and on multiple pages.
+2. Open **Bulk create** and select a UTF-8 CSV with unique column headers, for example:
+
+   ```csv
+   name,price
+   Ada,$12
+   Grace,$20
+   ```
+
+3. Map each placeholder to a column. Matching headers connect automatically. Select a preview row to check wrapping and layout.
+4. Choose **Download PNGs as ZIP**. Each CSV row creates one PNG per template page at the original design size; filenames include the row and page number. The source design stays unchanged. Replacement text retains layer formatting; per-character styling is cleared when a layer's text changes. Review grouped text when longer values change its bounds.
+
+SVG import, health checks and bulk generation run in the browser without provider API keys or additional self-hosted services. Imported SVG layers save through the normal design autosave. SVG groups are flattened into independently editable layers; positioned text spans become separate text layers. Use inline presentation attributes instead of stylesheets, and outline unsupported text layouts in the SVG source if necessary.
 
 ## Self-host in a few steps
 

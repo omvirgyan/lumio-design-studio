@@ -1,6 +1,6 @@
 "use client";
 
-import { FabricObject, Gradient, InteractiveFabricObject, StaticCanvas, util, type TFiller } from "fabric";
+import { FabricObject, Gradient, Group, InteractiveFabricObject, StaticCanvas, util, type BaseFabricObject, type TFiller } from "fabric";
 import type { PageBackground, PageData, SerializedObject } from "@/lib/design/types";
 import { loadFonts } from "@/lib/design/fonts";
 
@@ -60,6 +60,13 @@ export function backgroundCss(bg: PageBackground): string {
 export function collectFonts(objects: SerializedObject[], out = new Set<string>()): Set<string> {
   for (const o of objects) {
     if (typeof o.fontFamily === "string") out.add(o.fontFamily);
+    if (o.styles && typeof o.styles === "object") {
+      for (const line of Object.values(o.styles)) {
+        if (line && typeof line === "object") for (const style of Object.values(line)) {
+          if (style && typeof style === "object" && "fontFamily" in style && typeof style.fontFamily === "string") out.add(style.fontFamily);
+        }
+      }
+    }
     if (Array.isArray(o.objects)) collectFonts(o.objects as SerializedObject[], out);
   }
   return out;
@@ -79,13 +86,25 @@ export function applyLockState(obj: FabricObject): void {
   } as Partial<FabricObject>);
 }
 
-/** Enlivens objects one by one so a single broken object (e.g. a deleted upload) does not break the page. */
-export async function enlivenSafe(objects: SerializedObject[]): Promise<FabricObject[]> {
+/** Fabric can silently omit failed children; exports must detect partial groups too. */
+export function isCompleteObject(source: SerializedObject, instance: BaseFabricObject): boolean {
+  if (Array.isArray(source.objects)) {
+    if (!(instance instanceof Group)) return false;
+    const children = instance.getObjects();
+    if (children.length !== source.objects.length || !source.objects.every((child, i) => isCompleteObject(child as SerializedObject, children[i]))) return false;
+  }
+  if (source.clipPath && (!instance.clipPath || !isCompleteObject(source.clipPath as SerializedObject, instance.clipPath))) return false;
+  return true;
+}
+
+/** Previews tolerate broken assets; strict exports refuse incomplete artwork. */
+export async function enlivenSafe(objects: SerializedObject[], strict = false): Promise<FabricObject[]> {
   const results = await Promise.allSettled(objects.map((o) => util.enlivenObjects<FabricObject>([o])));
   const out: FabricObject[] = [];
   results.forEach((r, i) => {
-    if (r.status === "fulfilled") out.push(...r.value);
-    else console.warn("Skipping object that failed to load", objects[i]?.type, r.reason);
+    if (r.status === "fulfilled" && r.value.length && (!strict || isCompleteObject(objects[i], r.value[0]))) out.push(...r.value);
+    else if (strict) throw new Error(`Could not load "${objects[i]?.name ?? objects[i]?.type ?? "object"}". Restore the missing asset before exporting.`);
+    else console.warn("Skipping object that failed to load", objects[i]?.type);
   });
   return out;
 }
@@ -95,14 +114,14 @@ export async function renderPage(
   page: PageData,
   width: number,
   height: number,
-  options: { multiplier: number; format: "png" | "jpeg"; quality?: number; transparent?: boolean },
+  options: { multiplier: number; format: "png" | "jpeg"; quality?: number; transparent?: boolean; strict?: boolean },
 ): Promise<string> {
   configureFabric();
   await loadFonts(collectFonts(page.objects));
   const el = document.createElement("canvas");
   const sc = new StaticCanvas(el, { width, height, enableRetinaScaling: false, renderOnAddRemove: false });
   try {
-    const objects = await enlivenSafe(page.objects);
+    const objects = await enlivenSafe(page.objects, options.strict);
     sc.add(...objects);
     if (!options.transparent) sc.backgroundColor = backgroundFill(page.background, width, height);
     else if (options.format === "jpeg") sc.backgroundColor = "#ffffff";

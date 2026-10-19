@@ -4,6 +4,7 @@ import {
   Check,
   CircleAlert,
   CloudUpload,
+  FileSpreadsheet,
   Download,
   History,
   Home,
@@ -23,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api, ApiError } from "@/lib/api-client";
 import type { DesignDoc } from "@/lib/design/types";
@@ -43,13 +45,16 @@ import { text as textBuilder } from "@/lib/design/builders";
 
 export type EditorDesign = { id: string; title: string; doc: DesignDoc; shareToken: string | null; revision: number };
 
-type PanelId = "templates" | "elements" | "text" | "uploads" | "brand" | "ai" | "background" | "layers" | "history";
+const BulkPanel = dynamic(() => import("./bulk-panel").then((module) => module.BulkPanel));
+
+type PanelId = "templates" | "elements" | "text" | "uploads" | "bulk" | "brand" | "ai" | "background" | "layers" | "history";
 
 const PANELS: { id: PanelId; label: string; icon: typeof Shapes }[] = [
   { id: "templates", label: "Templates", icon: LayoutTemplate },
   { id: "elements", label: "Elements", icon: Shapes },
   { id: "text", label: "Text", icon: Type },
   { id: "uploads", label: "Uploads", icon: UploadIcon },
+  { id: "bulk", label: "Bulk create", icon: FileSpreadsheet },
   { id: "brand", label: "Brand Kit", icon: Palette },
   { id: "ai", label: "AI Studio", icon: Sparkles },
   { id: "background", label: "Background", icon: PaintBucket },
@@ -327,6 +332,12 @@ export function Editor({ design }: { design: EditorDesign }) {
       if (!eng) return;
       for (const file of files) {
         try {
+          if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
+            const { importSvg } = await import("./svg-import");
+            await eng.addSerialized(await importSvg(file, eng.size, at));
+            notify("SVG imported as editable layers");
+            continue;
+          }
           const upload = await uploadImage(file);
           await eng.addImage(upload.url, upload.name, at);
         } catch (err) {
@@ -343,7 +354,7 @@ export function Editor({ design }: { design: EditorDesign }) {
     const eng = engineRef.current;
     if (!eng) return;
     const at = eng.clientToScene(e.clientX, e.clientY);
-    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/") || f.name.toLowerCase().endsWith(".svg"));
     if (files.length) {
       void addImageFiles(files, at);
       return;
@@ -519,6 +530,7 @@ export function Editor({ design }: { design: EditorDesign }) {
                 {panel === "elements" && <ElementsPanel />}
                 {panel === "text" && <TextPanel />}
                 {panel === "uploads" && <UploadsPanel />}
+                {panel === "bulk" && <BulkPanel />}
                 {panel === "brand" && <BrandKitPanel />}
                 {panel === "background" && <BackgroundPanel />}
                 {panel === "layers" && <LayersPanel />}

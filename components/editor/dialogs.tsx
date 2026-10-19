@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Spinner } from "@/components/ui/input";
 import { useEditor } from "./editor-context";
 import { exportDesign, type ExportFormat } from "./export";
+import { HealthReport } from "./health-report";
 
 const FORMATS: { id: ExportFormat; label: string; hint: string }[] = [
   { id: "png", label: "PNG", hint: "Best for images with text or transparency" },
@@ -26,6 +27,7 @@ export function DownloadDialog({ open, onClose, title }: { open: boolean; onClos
   const [quality, setQuality] = useState(0.9);
   const [which, setWhich] = useState<"all" | "current">("all");
   const [busy, setBusy] = useState(false);
+  const [healthReady, setHealthReady] = useState(false);
   const maxScale = Math.max(1, Math.min(4, Math.floor(8000 / Math.max(state.width, state.height))));
 
   async function run() {
@@ -87,7 +89,8 @@ export function DownloadDialog({ open, onClose, title }: { open: boolean; onClos
           </select>
         </label>
       )}
-      <Button className="mt-6 w-full" size="lg" onClick={run} disabled={busy}>
+      {open && <HealthReport currentOnly={which === "current"} scale={format === "svg" ? 1 : scale} transparent={transparent && format === "png"} onReadyChange={setHealthReady} />}
+      <Button className="mt-6 w-full" size="lg" onClick={run} disabled={busy || !healthReady}>
         {busy && <Spinner />} Download
       </Button>
     </Dialog>
